@@ -11,8 +11,7 @@
 import pymupdf #type: ignore
 from time import sleep
        
-class PDFProcessor:
-     
+class PDFProcessor: 
     def __init__(self, title: str, headerLen: int = 0, footerLen: int = 0, LOGGING_showRawPages: bool = False) -> None:
         self.title = title
         self.headerLen = headerLen
@@ -37,9 +36,12 @@ class PDFProcessor:
         }
 
         self.unicodeDict_MultiPass: dict[str, str] = {
+            #chr(10):    "test",
             "  ":       " ",    # Fixes double space
-            "- ":       ""  
+            "- ":       "-"  
         }
+
+        self.paragraphEndMarkers: list[str] = ['"', '.', '!', '?']
 
     def LOGGING_saveCharandUnicode(self, listOfParagraphs: list[str]) -> None:
         with open("char_and_uni.txt", "w") as text_file:
@@ -72,8 +74,16 @@ class PDFProcessor:
 
         return text
 
+    def _stripExtraChars(self, text: str) -> str:
+        charToStrip: list[str] = ['\n', ' ']
+
+        for c in charToStrip:
+            text = text.strip(c)
+        
+        text = text.replace('\n', '')   # Found that some random line breaks were getting through prior cleanings
+        return text
+
     def _splitParagraphs(self, text: str, headerLen: int = 0, footerLen: int = 0) -> list[str]:
-        paragraphEndMarkers: list[str] = ['"', '.', '!', '?']
         textList: list = list(text)     # Convert to list for mutability
         priorCutIndex: int = 0    # Stores end of last paragraph
         breakCount: int = 0     # Counts how many line breaks the script has encountered on this page
@@ -88,8 +98,9 @@ class PDFProcessor:
 
                 if breakCount > headerLen:  # If not in header
 
-                    if priorChar in paragraphEndMarkers:    # If prior index seems likely for paragraph break
+                    if priorChar in self.paragraphEndMarkers:    # If prior index seems likely for paragraph break
                         newParagraph: str = "".join(textList[priorCutIndex:ci])
+                        
                         paragraphs.append(newParagraph)
                         
                         priorCutIndex = ci
@@ -102,13 +113,41 @@ class PDFProcessor:
         
 
         lastParagraph:str = "".join(textList[priorCutIndex:])
-        lastParagraph += "\n"
         paragraphs.append(lastParagraph)
 
-        return paragraphs
+        strippedParagraphs: list[str] = [self._stripExtraChars(p) for p in paragraphs]
 
-    def _mendBrokenParagraphs(self) -> None:
-        ...
+        return strippedParagraphs
+
+    def _notEmptyParagraph(self, text: str) -> bool:
+        return not all(c == chr(10) for c in text)
+
+    def _mendSplitParagraphs(self, paragraphs: list[str]) -> list[str]:
+        newParagraphList: list[str] = []
+        skipPar: bool = False
+
+        for pi in range(len(paragraphs)):  #pi - Paragraph Index
+            if skipPar:
+                skipPar = False
+                continue
+
+            par: str = paragraphs[pi]
+
+
+            if (par[-1] == '-') or (par[-1] not in self.paragraphEndMarkers):   # If line ends in a broken work, or ends abruptly
+                try:
+                    nextPar: str = paragraphs[pi + 1]
+                    newParagraphList.append(par[:-2] + nextPar)
+                    
+                    skipPar = True # Skips the next paragraph, since we attatched it to the current one
+
+                except IndexError:
+                    newParagraphList.append(par)
+
+            else:
+                newParagraphList.append(par)
+
+        return newParagraphList
 
     def pagesToParagraphList(self, pages) -> list[str]:
         processedParagraphs: list[str] = []
@@ -120,15 +159,31 @@ class PDFProcessor:
             if self.LOGGING_showRawPages:      # Prints page without paragraph logic, used to determain header/footer length 
                 print(pageText)
 
+            listOfParagraphs: list[str] = self._splitParagraphs(pageText, headerLen= self.headerLen)
 
-            listOfParagraphs = self._splitParagraphs(pageText, headerLen= self.headerLen)
-
-            for rawPar in listOfParagraphs: 
-                paragraph: str = self._repairText(rawPar)   # Repeated Secondary repair pass
-                processedParagraphs.append(paragraph)
-        
-        return processedParagraphs
+            # Repeated Secondary repair pass
+            for paragraph in listOfParagraphs:
+                if self._notEmptyParagraph(paragraph):
+                    processedParagraphs.append(self._repairText(paragraph))
             
+            
+                
+
+        processedParagraphs = self._mendSplitParagraphs(processedParagraphs)
+
+        return processedParagraphs 
+
+class FormatToEpub:
+    def __init__(self, paragraphList: list[str]) -> None:
+        self.paragraphList = paragraphList
+    
+    def formatEpub(self) -> list[str]:
+        newPars: list[str] = []
+
+        for par in self.paragraphList:
+            newPars.append(f'<p>{par}</p>\n')
+        
+        return newPars
 
 def saveToFile(fileName: str, paragraphs: list[str]) -> None:
     with open(fileName, "w") as text_file:
@@ -140,7 +195,9 @@ def main() -> None:
     pdfProc = PDFProcessor(title="1984", headerLen=2)
 
     paragraphList: list[str] = pdfProc.pagesToParagraphList(pages= doc)
-                
+    formEpub = FormatToEpub(paragraphList= paragraphList)
+    paragraphList = formEpub.formatEpub()
+
     pdfProc.LOGGING_saveCharandUnicode(paragraphList)
     saveToFile(fileName= "output.txt", paragraphs= paragraphList)
 
