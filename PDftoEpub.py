@@ -165,10 +165,7 @@ class PDFProcessor:
             for paragraph in listOfParagraphs:
                 if self._notEmptyParagraph(paragraph):
                     processedParagraphs.append(self._repairText(paragraph))
-            
-            
-                
-
+        
         processedParagraphs = self._mendSplitParagraphs(processedParagraphs)
 
         return processedParagraphs 
@@ -177,6 +174,16 @@ class FormatToEpub:
     def __init__(self, paragraphList: list[str]) -> None:
         self.paragraphList = paragraphList
     
+    def _extractPartsandChapters(self) -> None:
+        ...
+    
+    def _generateToC(self) -> str:
+        chapterFileDir: str = ''
+        chapterName: str = ''
+        chapRef: str = f'<a href="{chapterFileDir}">{chapterName}</a>'
+
+        return ''  
+
     def formatEpub(self) -> list[str]:
         newPars: list[str] = []
 
@@ -191,10 +198,12 @@ def saveToFile(fileName: str, paragraphs: list[str]) -> None:
             text_file.write(par)
 
 def main() -> None:
-    doc = pymupdf.open("1984.pdf", filetype='.pdf') # open a document
-    pdfProc = PDFProcessor(title="1984", headerLen=2)
+    fileName: str = '1984.pdf'
+    doc = pymupdf.open(fileName, filetype='.pdf') # open a document
 
+    pdfProc = PDFProcessor(title="1984", headerLen=2)
     paragraphList: list[str] = pdfProc.pagesToParagraphList(pages= doc)
+
     formEpub = FormatToEpub(paragraphList= paragraphList)
     paragraphList = formEpub.formatEpub()
 
