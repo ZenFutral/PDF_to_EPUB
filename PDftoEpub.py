@@ -10,8 +10,37 @@
 
 import pymupdf #type: ignore
 from time import sleep
-       
-class pdf_processor: 
+
+class EPUBFormatter:
+    def __init__(self, paragraph_list: list[str]) -> None:
+        self.paragraph_list = paragraph_list
+    
+    def _extractPartsandChapters(self) -> None:
+        for p in self.paragraph_list:
+            if 'chapter' in p.lower():
+                print(p)
+    
+    def _generateToC(self) -> str:
+        chapter_file_dir: str = ''
+        chapter_name: str = ''
+        chapter_reference: str = f'<a href="{chapter_file_dir}">{chapter_name}</a>'
+
+        return ''  
+
+    def formatEpub(self) -> list[str]:
+        new_paragraphs: list[str] = []
+
+        for par in self.paragraph_list:
+            new_paragraphs.append(f'<p>{par}</p>\n')
+        
+        return new_paragraphs
+
+class DataProcessor:
+    def cleanData(self, data: list[str]) -> list[str]:
+
+        return ['']
+
+class PDFExtractor: 
     def __init__(self, title: str, header_len: int = 0, footer_len: int = 0, LOGGING_show_raw_pages: bool = False) -> None:
         self.title = title
         self.header_len = header_len
@@ -19,12 +48,12 @@ class pdf_processor:
         self.LOGGING_show_raw_pages = LOGGING_show_raw_pages
 
         self.unicode_dict_single_pass: dict[str, str] = {
-            '\u037e':   "",     # Greek Questionmark
             '\uf645':   "",     # PUA: Private Use Area
             '\uf646':   "",     # PUA
             '\uf648':   "",     # PUA
             '\uf649':   "",     # PUA
             '\uf64a':   "",     # PUA
+            '\u037e':   "",     # Greek Questionmark
             chr(39):    "'",    # Single Quote
             chr(160):   " ",    # Non-Breaking Space
             chr(173):   "-",    # Inverted Exclamation Mark
@@ -75,120 +104,61 @@ class pdf_processor:
 
         return text
 
-    def _stripExtraChars(self, text: str) -> str:
-        characters_to_strip: list[str] = ['\n', ' ']
-
-        for c in characters_to_strip:
-            text = text.strip(c)
-        
-        text = text.replace('\n', '')   # Found that some random line breaks were getting through prior cleanings
-        return text
-
-    def _splitPagetoLines(self, text: str, header_len: int = 0, footer_len: int = 0) -> list[str]:
-        text_list: list = list(text)     # Convert to list for mutability
+    def _splitByLineBreaks(self, text_list: list[str]) -> list[str]:
+        paragraph_list: list[str] = []
         prior_cut_index: int = 0    # Stores end of last paragraph
         break_count: int = 0     # Counts how many line breaks the script has encountered on this page
-        paragraphs: list[str] = []
 
         for ci in range(len(text_list)): # ci - Character Index
-            if ord(text_list[ci]) == 10:  # If line break
+            current_unicode: int = ord(text_list[ci])
+            prior_character: str = ''
+
+            if current_unicode == 10:  # If line break
                 prior_character = text_list[ci-1]
                 break_count += 1     # Tracks line breaks to estimate line number
-                
-                if break_count < header_len:  # If still in header lines
-                    prior_cut_index = ci
-                    continue
-                
-                if prior_character in self.paragraph_end_markers:    # If prior index seems likely for paragraph break
-                    new_paragraph: str = ''
-                    new_paragraph = "".join(text_list[prior_cut_index:ci])
-                    prior_cut_index = ci
-                    paragraphs.append(new_paragraph)
-                    
-                else:
-                    text_list[ci] = " "
-        
-        final_paragraph:str = "".join(text_list[prior_cut_index:])
-        paragraphs.append(final_paragraph)
-
-        stripped_paragraphs: list[str] = [self._stripExtraChars(p) for p in paragraphs]
-
-        return stripped_paragraphs
-
-    def _notEmptyParagraph(self, text: str) -> bool:
-        return not all(c == chr(10) for c in text)
-
-    def _mendSplitParagraphs(self, paragraphs: list[str]) -> list[str]:
-        new_paragraph_list: list[str] = []
-        skip_paragraph: bool = False
-
-        for pi in range(len(paragraphs)):  #pi - Paragraph Index
-            if skip_paragraph:
-                skip_paragraph = False
+            
+            else:   # If not line break, just skip
                 continue
 
-            par: str = paragraphs[pi]
+            if break_count <= self.header_len:  # If still in header lines
+                prior_cut_index = ci
+                continue
 
-            if (par[-1] == '-') or (par[-1] not in self.paragraph_end_markers):   # If line ends in a broken word, or ends abruptly
-                try:
-                    next_paragraph: str = paragraphs[pi + 1]
-                    new_paragraph_list.append(par[:-2] + next_paragraph)
+            if prior_character in self.paragraph_end_markers:    # If prior index seems likely for paragraph break
+                new_paragraph: str = ''.join(text_list[prior_cut_index:ci])
+                prior_cut_index = ci    # Saves the end of this cut for next time
+                paragraph_list.append(new_paragraph)
                     
-                    skip_paragraph = True # Skips the next paragraph, since we attatched it to the current one
+            else:   # Replace line break with space
+                text_list[ci] = " "
+        
+        final_paragraph: str = "".join(text_list[prior_cut_index:])
+        paragraph_list.append(final_paragraph)
 
-                except IndexError:
-                    new_paragraph_list.append(par)
+        return paragraph_list
 
-            else:
-                new_paragraph_list.append(par)
+    def _extractParagraphs(self, page) -> list[str]:
+        raw_page_text: str = page.get_text()
+        page_text = raw_page_text.encode(encoding= 'utf-32').decode(encoding= 'utf-32')
+        page_text = self._repairText(text = raw_page_text)  # First pass repair, this is only done to avoid encoding errors
+        print(page_text)
 
-        return new_paragraph_list
+        text_list: list = list(page_text)     # Convert to list for mutability
+        
+        list_of_paragraphs: list[str] = self._splitByLineBreaks(text_list)
 
-    def pagesToparagraph_list(self, pages) -> list[str]:
-        processed_paragraphs: list[str] = []
+        list_of_paragraphs = [self._repairText(p) for p in list_of_paragraphs]
+
+        return list_of_paragraphs
+
+    def extractData(self, pages) -> list[str]:
+        master_list_of_strings: list[str] = []
 
         for page in pages:
-            raw_page_text: str = str(page.get_text())
-            page_text = self._repairText(text = raw_page_text)  # First pass repair, this is only done to avoid possible errors
-
-            if self.LOGGING_show_raw_pages:      # Prints page without paragraph logic, used to determain header/footer length 
-                print(page_text)
-
-            list_of_paragraphs: list[str] = self._splitPagetoLines(page_text, header_len = self.header_len)
-
-            # Repeated Secondary repair pass & Removes empty paragraphs
-            for paragraph in list_of_paragraphs:
-                if self._notEmptyParagraph(paragraph):
-                    processed_paragraphs.append(self._repairText(paragraph))
+            paragraphs_on_page: list[str] = self._extractParagraphs(page)
+            master_list_of_strings.extend(paragraphs_on_page)
         
-        # Mends weird breaks where there shouldn't be
-        processed_paragraphs = self._mendSplitParagraphs(processed_paragraphs)
-
-        return processed_paragraphs 
-
-class FormatToEpub:
-    def __init__(self, paragraph_list: list[str]) -> None:
-        self.paragraph_list = paragraph_list
-    
-    def _extractPartsandChapters(self) -> None:
-        for p in self.paragraph_list:
-            if 'chapter' in p.lower():
-                print(p)
-    
-    def _generateToC(self) -> str:
-        chapter_file_dir: str = ''
-        chapter_name: str = ''
-        chapter_reference: str = f'<a href="{chapter_file_dir}">{chapter_name}</a>'
-
-        return ''  
-
-    def formatEpub(self) -> list[str]:
-        new_paragraphs: list[str] = []
-
-        for par in self.paragraph_list:
-            new_paragraphs.append(f'<p>{par}</p>\n')
-        
-        return new_paragraphs
+        return master_list_of_strings 
 
 def saveToFile(file_name: str, paragraphs: list[str]) -> None:
     with open(file_name, "w") as text_file:
@@ -197,17 +167,23 @@ def saveToFile(file_name: str, paragraphs: list[str]) -> None:
 
 def main() -> None:
     file_name: str = '1984.pdf'
-    doc = pymupdf.open(file_name, filetype='.pdf') # open a document
+    document = pymupdf.open(file_name, filetype = '.pdf')
 
-    pdf_proc = pdf_processor(title="1984", header_len=2)
-    paragraph_list: list[str] = pdf_proc.pagesToparagraph_list(pages= doc)
+    pdf_extractor: PDFExtractor = PDFExtractor(title = "1984", header_len = 2)
+    pdf_data: list[str] = pdf_extractor.extractData(pages = document)
 
+    data_processor: DataProcessor = DataProcessor()
+    #clean_data: list[str] = data_processor.cleanData(pdf_data)
+
+
+    saveToFile(file_name= "output.txt", paragraphs= pdf_data)
+    '''
     form_epub = FormatToEpub(paragraph_list= paragraph_list)
     paragraph_list = form_epub.formatEpub()
-    form_epub._extractPartsandChapters()
+    #form_epub._extractPartsandChapters()
 
-    pdf_proc.LOGGING_saveCharandUnicode(paragraph_list)
-    saveToFile(file_name= "output.txt", paragraphs= paragraph_list)
+    pdf_processor.LOGGING_saveCharandUnicode(paragraph_list)
+    '''
 
 if __name__ == "__main__":
     main()
