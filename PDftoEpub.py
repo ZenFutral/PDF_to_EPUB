@@ -11,6 +11,9 @@
 import pymupdf #type: ignore
 from time import sleep
 
+paragraph_end_markers: list[str] = ['"', '.', '!', '?']
+
+
 class EPUBFormatter:
     def __init__(self, paragraph_list: list[str]) -> None:
         self.paragraph_list = paragraph_list
@@ -49,11 +52,16 @@ class DataProcessor:
         f" {chr(8216)}":       f" {chr(8220)}",     # Left  Single Quotation Mark, preceeded by space
         f"\n{chr(8216)}":      f"\n{chr(8220)}",    # Left  Single Quotation Mark, preceeded by break
         chr(8216):              "'",                # Left  Single Quotation Mark
-        f"{chr(8217)} ":       f"{chr(8221)} ",     # Right Single Quotation Mark, followed by space
-        f"{chr(8217)}\n":      f"{chr(8221)}\n",    # Right Single Quotation Mark, followed by break
+        f".{chr(8217)}":       f".{chr(8221)}",     # Right Single Quotation Mark, preceeded by .
+        f",{chr(8217)}":       f",{chr(8221)}",     # Right Single Quotation Mark, preceeded by ,
+        f"!{chr(8217)}":       f"!{chr(8221)}",     # Right Single Quotation Mark, preceeded by !
+        f"?{chr(8217)}":       f"?{chr(8221)}",     # Right Single Quotation Mark, preceeded by ?
+        f"—{chr(8217)}":       f"—{chr(8221)}",     # Right Single Quotation Mark, preceeded by —
+
         chr(8217):              "'",                # Right Single Quotation Mark
 
-        '— —' : '——'
+        '— —' : '——',
+        '\n': ''
     }
 
     unicode_dict_multi_pass: dict[str, str] = {
@@ -61,12 +69,15 @@ class DataProcessor:
         "- ":       ""      # Removes word breaks between pages
     }
 
-    def _repairText(self, text: str) -> str:
+    def _repairSinglePass(self, text: str) -> str:
         # Repairs any single pass issues
         for key in DataProcessor.unicode_dict_single_pass.keys():
             if key in text:
                 text = text.replace(key, DataProcessor.unicode_dict_single_pass[key])
-
+        
+        return text
+    
+    def _repairMultiPass(self, text: str) -> str:
         # Repairs any multi pass issues
         is_errors = True
 
@@ -86,14 +97,68 @@ class DataProcessor:
 
         return text
 
+    def _repairText(self, text: str) -> str:
+        text = self._repairSinglePass(text)
+        text = self._repairMultiPass(text)
 
-    def _repairBadBreaks(self, data: list[str]) -> list[str]:
-        return[""]
+        return text
+
+    def _repairBadBreaks(self, data: list[str]) -> tuple[list[str], bool]:
+        repaired_something: bool = False
+        new_data_list: list[str] = []
+        skip_paragraph: bool = False
+
+        for i in range(len(data)):
+            if skip_paragraph:
+                skip_paragraph = False
+                continue
+
+            if i == (len(data) - 1):
+                break
+
+            current_paragraph: str = data[i]
+            last_char: str = current_paragraph[-1]
+            if last_char not in paragraph_end_markers:
+                repaired_something = True
+                next_paragraph: str = data[i + 1]
+                new_paragraph: str = current_paragraph + next_paragraph
+                skip_paragraph = True
+            
+            else:
+                new_paragraph = current_paragraph
+
+            new_data_list.append(new_paragraph)
+        
+        return new_data_list, repaired_something
+
+    def _initiateBadBreakRepair(self, data: list[str]) -> list[str]:
+        repairing: bool = True
+
+        while repairing:
+            data, repairing = self._repairBadBreaks(data)
+
+        return data
+
+    def _removeEmptyLines(self, data: list[str]) -> list[str]:
+        new_data: list[str] = []
+
+        for text in data:
+            checker_text: str = text.replace('\n', '').replace(' ', '')
+            if len(checker_text) == 0:
+                continue
+
+            else:
+                new_data.append(text)
+            
+        return new_data
 
     def cleanData(self, data: list[str]) -> list[str]:
         data = [self._repairText(text) for text in data]
-        return data
+        data = [text.strip() for text in data]
+        data = self._removeEmptyLines(data)
+        data = self._initiateBadBreakRepair(data)
 
+        return data
 
 class PDFExtractor: 
     def __init__(self, title: str, header_len: int = 0, footer_len: int = 0, LOGGING_show_raw_pages: bool = False) -> None:
@@ -102,7 +167,6 @@ class PDFExtractor:
         self.footer_len = footer_len
         self.LOGGING_show_raw_pages = LOGGING_show_raw_pages
 
-        self.paragraph_end_markers: list[str] = ['"', '.', '!', '?']
 
     def LOGGING_saveCharandUnicode(self, list_of_paragraphs: list[str]) -> None:
         with open("char_and_uni.txt", "w") as text_file:
@@ -131,7 +195,7 @@ class PDFExtractor:
                 prior_cut_index = ci
                 continue
 
-            if prior_character in self.paragraph_end_markers:    # If prior index seems likely for paragraph break
+            if prior_character in paragraph_end_markers:    # If prior index seems likely for paragraph break
                 new_paragraph: str = ''.join(text_list[prior_cut_index:ci])
                 prior_cut_index = ci    # Saves the end of this cut for next time
                 paragraph_list.append(new_paragraph)
@@ -163,7 +227,12 @@ class PDFExtractor:
 def saveToFile(file_name: str, paragraphs: list[str]) -> None:
     with open(file_name, "w", encoding='utf-16') as text_file:
         for par in paragraphs:
-            text_file.write(par)
+            text_file.write(par + '\n')
+    
+    with open((file_name + '_repr'), "w", encoding='utf-16') as text_file:
+        for par in paragraphs:
+            text_file.write(repr(par + '\n'))
+
 
 def main() -> None:
     file_name: str = '1984.pdf'
