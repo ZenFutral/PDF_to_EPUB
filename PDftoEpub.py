@@ -14,14 +14,11 @@ from time import sleep
 paragraph_end_markers: list[str] = ['"', '.', '!', '?']
 
 
-class EPUBFormatter:
-    def __init__(self, paragraph_list: list[str]) -> None:
-        self.paragraph_list = paragraph_list
-    
-    def _extractPartsandChapters(self) -> None:
-        for p in self.paragraph_list:
-            if 'chapter' in p.lower():
-                print(p)
+class EPUBFormatter:    
+    def _extractPartsandChapters(self, data) -> None:
+        for text in data:
+            if 'chapter' in text.lower():
+                print(text)
     
     def _generateToC(self) -> str:
         chapter_file_dir: str = ''
@@ -30,15 +27,141 @@ class EPUBFormatter:
 
         return ''  
 
-    def formatEpub(self) -> list[str]:
-        new_paragraphs: list[str] = []
+    def formatEpub(self, data: list[str]) -> list[str]:
+        new_data: list[str] = []
 
-        for par in self.paragraph_list:
-            new_paragraphs.append(f'<p>{par}</p>\n')
+        for text in data:
+            new_data.append(f'<p>{text}</p>\n')
         
-        return new_paragraphs
+        return new_data
 
-class DataProcessor:
+class DataOrganizer:
+    def _getSectionNumber(self, section_type: str, text: str) -> str:
+        section_number: str = ''
+
+        for char in text[len(section_type):]:  # Start iterating the character following 'Chapter ' looking for int
+            try:
+                int(char)   # Tests if character can be converted to int
+                section_number += char
+            
+            except ValueError:
+                break
+
+        if len(section_number) > 0: # If a chapter number was found as an int
+            return section_number
+            
+        else:               # Start looking for a string version of the number (ie 'one', 'two')
+            number_words: dict[str, int] = {
+                'i': 1,
+                'ii': 2,
+                'iii': 3,
+                'iv': 4,
+                'v': 5,
+                'vi': 6,
+                'vii': 7,
+                'viii': 8,
+                'ix': 9,
+                'x': 10,
+                'one': 1,
+                'two': 2,
+                'three': 3,
+                'four': 4,
+                'five': 5,
+                'six': 6,
+                'seven': 7,
+                'eight': 8,
+                'nine': 9,
+                'ten': 10,
+                'eleven': 11,
+                'twelve': 12,
+                'thirteen': 13,
+                'fourteen': 14,
+                'fifteen': 15,
+                'sixteen': 16,
+                'seventeen': 17,
+                'eighteen': 18,
+                'nineteen': 19,
+                'twenty': 20,
+                'twenty-one': 21,
+                'twenty-two': 22,
+                'twenty-three': 23,
+                'twenty-four': 24,
+                'twenty-five': 25,
+                'twenty-six': 26,
+                'twenty-seven': 27,
+                'twenty-eight': 28,
+                'twenty-nine': 29,
+                'thirty': 30,
+                'thirty-one': 31,
+                'thirty-two': 32,
+                'thirty-three': 33,
+                'thirty-four': 34,
+                'thirty-five': 35,
+                'thirty-six': 36,
+                'thirty-seven': 37,
+                'thirty-eight': 38,
+                'thirty-nine': 39,
+                'forty': 40,
+                'forty-one': 41,
+                'forty-two': 42,
+                'forty-three': 43,
+                'forty-four': 44,
+                'forty-five': 45,
+                'forty-six': 46,
+                'forty-seven': 47,
+                'forty-eight': 48,
+                'forty-nine': 49,
+                'fifty': 50
+            }
+            search_width: int = 12 # Most characters of all keys in number_words
+        
+        search_area: str = text[len(section_type):(len(section_type) + search_width)].lower()
+        dict_keys: list = list(number_words.keys())
+        dict_keys.reverse()
+        for key in dict_keys:
+            if key in search_area:
+                return str(number_words[key])
+            
+        return ""
+
+    def _getSectionMarker(self, section_type: str, data: list[str]) -> list[str]:
+        new_data: list[str] = []
+
+        if section_type[-1] != " ":
+            section_type += " "
+
+        for text in data:       
+            if section_type in text:                          
+                ci = text.index(section_type)   # Character Index
+                section_number: str = self._getSectionNumber(section_type=section_type, text=text[ci:])
+
+                if len(section_number) > 0:
+                    section_name: str = f'{section_type}{section_number}'
+
+                    new_data.append(text[:ci])
+                    new_data.append(section_name)
+                    new_data.append(text[(ci + len(section_name) + 1):])
+                
+                else:
+                    new_data.append(text)
+
+            else:
+                new_data.append(text)
+            
+        return new_data
+            
+    def extractBookData(self, data: list[str]) -> list[str]:
+        data = self._getSectionMarker(section_type='Chapter', data=data)
+        data = self._getSectionMarker(section_type='Part', data=data)
+
+        new_data: list[str] = []
+        for text in data:
+            if len(text) > 3:
+                new_data.append(text)
+
+        return new_data
+                
+class DataCleaner:
     unicode_dict_single_pass: dict[str, str] = {
         # PUA: Private Use Area
         '\uf645':               "",                 
@@ -66,14 +189,15 @@ class DataProcessor:
 
     unicode_dict_multi_pass: dict[str, str] = {
         "  ":       " ",    # Fixes double space
-        "- ":       ""      # Removes word breaks between pages
+        "- ":       "",     # Removes word breaks between pages
+        '———':      '——'
     }
 
     def _repairSinglePass(self, text: str) -> str:
         # Repairs any single pass issues
-        for key in DataProcessor.unicode_dict_single_pass.keys():
+        for key in DataCleaner.unicode_dict_single_pass.keys():
             if key in text:
-                text = text.replace(key, DataProcessor.unicode_dict_single_pass[key])
+                text = text.replace(key, DataCleaner.unicode_dict_single_pass[key])
         
         return text
     
@@ -84,9 +208,9 @@ class DataProcessor:
         while is_errors:
             error_list = []
 
-            for key in DataProcessor.unicode_dict_multi_pass.keys():
+            for key in DataCleaner.unicode_dict_multi_pass.keys():
                 if key in text:
-                    text = text.replace(key, DataProcessor.unicode_dict_multi_pass[key])
+                    text = text.replace(key, DataCleaner.unicode_dict_multi_pass[key])
                     error_list.append(True)
                 
                 else:
@@ -233,7 +357,6 @@ def saveToFile(file_name: str, paragraphs: list[str]) -> None:
         for par in paragraphs:
             text_file.write(repr(par + '\n'))
 
-
 def main() -> None:
     file_name: str = '1984.pdf'
     document = pymupdf.open(file_name, filetype = '.pdf',)
@@ -241,18 +364,16 @@ def main() -> None:
     pdf_extractor: PDFExtractor = PDFExtractor(title = "1984", header_len = 2)
     pdf_data: list[str] = pdf_extractor.extractData(pages = document)
 
-    data_processor: DataProcessor = DataProcessor()
-    clean_data: list[str] = data_processor.cleanData(pdf_data)
+    data_cleaner: DataCleaner = DataCleaner()
+    clean_data: list[str] = data_cleaner.cleanData(pdf_data)
 
+    data_org: DataOrganizer = DataOrganizer()
+    data: list[str] = data_org.extractBookData(clean_data)
 
-    saveToFile(file_name= "output.txt", paragraphs= clean_data)
-    '''
-    form_epub = FormatToEpub(paragraph_list= paragraph_list)
-    paragraph_list = form_epub.formatEpub()
-    #form_epub._extractPartsandChapters()
+    #form_epub: EPUBFormatter = EPUBFormatter()
+    #formatted_data = form_epub.formatEpub(clean_data)
 
-    pdf_processor.LOGGING_saveCharandUnicode(paragraph_list)
-    '''
+    saveToFile(file_name= "output.txt", paragraphs= data)
 
 if __name__ == "__main__":
     main()
