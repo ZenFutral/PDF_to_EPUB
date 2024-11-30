@@ -10,11 +10,12 @@
 
 import pymupdf #type: ignore
 from time import sleep
+import spellchecker
 
 paragraph_end_markers: list[str] = ['"', '.', '!', '?']
+section_names: list[str] = ["Part", "Chapter"]  # Ordered from top organizational layer downwards (ie Parts > Chapters > Scenes)
 
-
-class EPUBFormatter:    
+class EPUBFormatter:
     def _extractPartsandChapters(self, data) -> None:
         for text in data:
             if 'chapter' in text.lower():
@@ -52,16 +53,6 @@ class DataOrganizer:
             
         else:               # Start looking for a string version of the number (ie 'one', 'two')
             number_words: dict[str, int] = {
-                'i': 1,
-                'ii': 2,
-                'iii': 3,
-                'iv': 4,
-                'v': 5,
-                'vi': 6,
-                'vii': 7,
-                'viii': 8,
-                'ix': 9,
-                'x': 10,
                 'one': 1,
                 'two': 2,
                 'three': 3,
@@ -124,13 +115,24 @@ class DataOrganizer:
             
         return ""
 
-    def _getSectionMarker(self, section_type: str, data: list[str]) -> list[str]:
+    def _fixDropcapSpace(self, text: str) -> str:
+        first_char: str = text[0]
+        one_char_words: list[str] = ['a', 'i']
+
+        if first_char.lower() not in one_char_words:
+            print(f'{first_char}{text[2:]}')
+            return f'{first_char}{text[2:]}'
+        
+        else:
+            return text
+
+    def _getSectionMarker(self, section_type: str, sections_found: list[tuple[str, int]], data: list[str]):
         new_data: list[str] = []
 
         if section_type[-1] != " ":
             section_type += " "
 
-        for text in data:       
+        for text in data:     
             if section_type in text:                          
                 ci = text.index(section_type)   # Character Index
                 section_number: str = self._getSectionNumber(section_type=section_type, text=text[ci:])
@@ -139,28 +141,41 @@ class DataOrganizer:
                     section_name: str = f'{section_type}{section_number}'
 
                     new_data.append(text[:ci])
+
                     new_data.append(section_name)
-                    new_data.append(text[(ci + len(section_name) + 1):])
+                    sections_found.append((section_name, len(new_data)))
+
+                    following_text: str = text[(ci + len(section_name)):]
+                    new_data.append(following_text)
                 
                 else:
                     new_data.append(text)
 
             else:
                 new_data.append(text)
-            
-        return new_data
-            
-    def extractBookData(self, data: list[str]) -> list[str]:
-        data = self._getSectionMarker(section_type='Chapter', data=data)
-        data = self._getSectionMarker(section_type='Part', data=data)
 
-        new_data: list[str] = []
-        for text in data:
-            if len(text) > 3:
-                new_data.append(text)
+        new_data = [self._fixDropcapSpace(text) for text in new_data]
+        return new_data, sections_found
+            
+    def extractBookData(self, data: list[str]) -> tuple[list[str], list[str]]:
+        sections_found: list[tuple[str, int]] = []  #Tuple is (Section Name, Line) Example: [(Part 1, 1), (Chapter 1, 2), (Chapter 2, 20)]
 
-        return new_data
-                
+        for name in section_names:
+            data, sections_found = self._getSectionMarker(sections_found=sections_found, section_type=name, data=data)
+        
+        sections_found = sorted(sections_found, key=lambda x: x[1])
+        sections: list[str] = [section[0] for section in sections_found]    # Strips line index, since that will be meaningless after the following line where empty strings are dismissed.
+
+        new_data: list[str] = [text for text in data if len(text) > 3]
+
+        return (new_data, sections)
+
+#    def organizeSections(self, data: list[str], sections: list[str]) -> dict:
+#        book_dict: dict = {}
+#        
+#        for section in sections:
+#            section_idx: int = data.index(section)
+
 class DataCleaner:
     unicode_dict_single_pass: dict[str, str] = {
         # PUA: Private Use Area
@@ -229,8 +244,8 @@ class DataCleaner:
 
     def _repairBadBreaks(self, data: list[str]) -> tuple[list[str], bool]:
         repaired_something: bool = False
-        new_data_list: list[str] = []
         skip_paragraph: bool = False
+        new_data_list: list[str] = []
 
         for i in range(len(data)):
             if skip_paragraph:
@@ -244,9 +259,9 @@ class DataCleaner:
             last_char: str = current_paragraph[-1]
             if last_char not in paragraph_end_markers:
                 repaired_something = True
+                skip_paragraph = True
                 next_paragraph: str = data[i + 1]
                 new_paragraph: str = current_paragraph + next_paragraph
-                skip_paragraph = True
             
             else:
                 new_paragraph = current_paragraph
@@ -291,7 +306,6 @@ class PDFExtractor:
         self.footer_len = footer_len
         self.LOGGING_show_raw_pages = LOGGING_show_raw_pages
 
-
     def LOGGING_saveCharandUnicode(self, list_of_paragraphs: list[str]) -> None:
         with open("char_and_uni.txt", "w") as text_file:
             for paragraph in list_of_paragraphs:
@@ -330,6 +344,8 @@ class PDFExtractor:
         final_paragraph: str = "".join(text_list[prior_cut_index:])
         paragraph_list.append(final_paragraph)
 
+        paragraph_list = [p for p in paragraph_list if len(p) > 3]
+
         return paragraph_list
 
     def _extractParagraphs(self, page_data) -> list[str]:
@@ -339,14 +355,14 @@ class PDFExtractor:
         return list_of_paragraphs
 
     def extractData(self, pages) -> list[str]:
-        master_list_of_strings: list[str] = []
+        data_list: list[str] = []
 
         for page in pages:
             raw_page_data: str = page.get_text()
             paragraphs_on_page: list[str] = self._extractParagraphs(raw_page_data)
-            master_list_of_strings.extend(paragraphs_on_page)
+            data_list.extend(paragraphs_on_page)
         
-        return master_list_of_strings 
+        return data_list 
 
 def saveToFile(file_name: str, paragraphs: list[str]) -> None:
     with open(file_name, "w", encoding='utf-16') as text_file:
@@ -368,7 +384,17 @@ def main() -> None:
     clean_data: list[str] = data_cleaner.cleanData(pdf_data)
 
     data_org: DataOrganizer = DataOrganizer()
-    data: list[str] = data_org.extractBookData(clean_data)
+    output_tuple: tuple = data_org.extractBookData(clean_data)
+    data: list[str] = output_tuple[0]
+    sections: list[str] = output_tuple[1]
+
+
+
+
+    for sec in sections:
+        if sec in data:
+            datai = data.index(sec)
+            print(data[datai])
 
     #form_epub: EPUBFormatter = EPUBFormatter()
     #formatted_data = form_epub.formatEpub(clean_data)
