@@ -17,41 +17,37 @@ from epub_formatter import EPUBFormatter
 
 section_names: list[str] = ["Part", "Chapter"]  # Ordered from top organizational layer downwards (ie Parts > Chapters > Scenes)
 
-
-
-def saveToFile(file_name: str, paragraphs: list[str]) -> None:
-    with open(file_name, "w", encoding='utf-16') as text_file:
+def saveToFile(file_name: str, paragraphs: list, include_unicode: bool = False) -> None:
+    folder_dir: str = r"resources\scripts\outputs\ ".strip()
+    file_dir: str = f"{folder_dir}{file_name}"
+    with open(file_dir, "w", encoding='utf-16') as text_file:
         for par in paragraphs:
             text_file.write(par + '\n')
-    
-    with open((file_name + '_repr'), "w", encoding='utf-16') as text_file:
-        for par in paragraphs:
-            text_file.write(repr(par + '\n'))
+
+    if include_unicode:
+        with open((file_dir + '_unicode'), "w", encoding='utf-16') as text_file:
+            for par in paragraphs:
+                text_file.write(repr(par + '\n'))
 
 def main() -> None:
     file_name: str = r"resources\test_pdfs\1984.pdf"
     document = pymupdf.open(file_name, filetype = '.pdf',)
 
-    pdf_extractor: PDFExtractor = PDFExtractor(title = "1984", header_len = 2)
-    pdf_data: list[str] = pdf_extractor.extractData(pages = document)
+    pdf_extractor: PDFExtractor = PDFExtractor(pages= document, section_types= section_names, title = "1984", header_len = 2)
+    pdf_data: list[str] = pdf_extractor.extractData()
+    sections_found: list[str] = pdf_extractor.sections_found
 
-    data_cleaner: DataCleaner = DataCleaner()
+    data_cleaner: DataCleaner = DataCleaner(sections= sections_found)
     clean_data: list[str] = data_cleaner.cleanData(pdf_data)
 
-    data_org: DataOrganizer = DataOrganizer(section_names=section_names)
-    output_tuple: tuple = data_org.extractBookData(clean_data)
-    data: list[str] = output_tuple[0]
-    sections: list[str] = output_tuple[1]
+    #data_org: DataOrganizer = DataOrganizer(section_names= section_names, data= clean_data)
+    #output_tuple: tuple = data_org.extractBookData()
+    #data: list[str] = output_tuple[0]
+    #sections: list[tuple[str, int]] = output_tuple[1]
 
-    for sec in sections:
-        if sec in data:
-            datai = data.index(sec)
-            print(data[datai])
-
-    #form_epub: EPUBFormatter = EPUBFormatter()
-    #formatted_data = form_epub.formatEpub(clean_data)
-
-    saveToFile(file_name= r"output.txt", paragraphs= data)
+    saveToFile(file_name= r"1_pdf_extractor.txt", paragraphs= pdf_data)
+    saveToFile(file_name= r"2_data_cleaner.txt", paragraphs= clean_data)
+    #saveToFile(file_name= r"3_data_org.txt", paragraphs= data)
 
 if __name__ == "__main__":
     main()

@@ -2,3 +2,6 @@
 /Egg.pdf
 /myPDF.pdf
 /scratch.py
+resources/scripts/outputs/1_pdf_extractor.txt
+resources/scripts/outputs/2_data_cleaner.txt
+resources/scripts/outputs/3_data_org.txt

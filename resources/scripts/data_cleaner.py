@@ -32,6 +32,9 @@ class DataCleaner:
         '———':      '——'
     }
 
+    def __init__(self, sections: list[str]) -> None:
+        self.sections: list[str] = sections
+
     def _repairSinglePass(self, text: str) -> str:
         # Repairs any single pass issues
         for key in DataCleaner.unicode_dict_single_pass.keys():
@@ -65,6 +68,14 @@ class DataCleaner:
         text = self._repairMultiPass(text)
 
         return text
+    
+    def _lastIdxIsInt(self, char: str) -> bool:
+        if char.isnumeric():
+            return True
+        
+        else:
+            return False
+        
 
     def _repairBadBreaks(self, data: list[str]) -> tuple[list[str], bool]:
         repaired_something: bool = False
@@ -72,25 +83,39 @@ class DataCleaner:
         new_data_list: list[str] = []
 
         for i in range(len(data)):
+            print(i, len(data))
+            if i == (len(data) - 1):    # If last line
+                break
+
             if skip_paragraph:
                 skip_paragraph = False
                 continue
 
-            if i == (len(data) - 1):
-                break
+            current_paragraph: str = data[i]    # If empty paragraph
+            if len(current_paragraph) < 1:
+                continue
 
-            current_paragraph: str = data[i]
-            last_char: str = current_paragraph[-1]
-            if last_char not in DataCleaner.paragraph_end_markers:
+                    
+            last_char: str = current_paragraph[-1]            
+
+            if self._lastIdxIsInt(last_char):
+                new_paragraph: str = '\n' + current_paragraph
+                new_data_list.append(new_paragraph)
+                continue
+
+
+            elif last_char not in DataCleaner.paragraph_end_markers:
                 repaired_something = True
                 skip_paragraph = True
                 next_paragraph: str = data[i + 1]
-                new_paragraph: str = current_paragraph + next_paragraph
+                new_paragraph = current_paragraph + next_paragraph
+                new_data_list.append(new_paragraph)
+                continue
             
-            else:
-                new_paragraph = current_paragraph
-
+            repaired_something = False
+            new_paragraph = current_paragraph
             new_data_list.append(new_paragraph)
+
         
         return new_data_list, repaired_something
 
