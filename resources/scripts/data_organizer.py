@@ -1,6 +1,7 @@
 class DataOrganizer:
     def __init__(self, section_names: list[str], data: list[str]) -> None:
         self.data: list[str] = data
+        self.sections: list[str] = section_names
 
     def extractBookData(self) -> tuple[list[str], list[tuple[str, int]]]:
         new_data: list[str] = []

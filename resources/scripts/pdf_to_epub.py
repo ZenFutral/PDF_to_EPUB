@@ -11,7 +11,6 @@
 import pymupdf #type: ignore
 from time import sleep
 from pdf_extractor import PDFExtractor
-from data_cleaner import DataCleaner
 from data_organizer import DataOrganizer
 from epub_formatter import EPUBFormatter
 
@@ -33,12 +32,17 @@ def main() -> None:
     file_name: str = r"resources\test_pdfs\1984.pdf"
     document = pymupdf.open(file_name, filetype = '.pdf',)
 
-    pdf_extractor: PDFExtractor = PDFExtractor(pages= document, section_types= section_names, title = "1984", header_len = 2)
+    pdf_extractor: PDFExtractor = PDFExtractor(
+        pages= document, 
+        section_types= section_names, 
+        title_pages_len= 1, 
+        title = "1984", 
+        header_len = 2
+    )
+    
     pdf_data: list[str] = pdf_extractor.extractData()
     sections_found: list[str] = pdf_extractor.sections_found
-
-    data_cleaner: DataCleaner = DataCleaner(sections= sections_found)
-    clean_data: list[str] = data_cleaner.cleanData(pdf_data)
+    clean_data: list[str] = pdf_extractor.cleanData(pdf_data)
 
     #data_org: DataOrganizer = DataOrganizer(section_names= section_names, data= clean_data)
     #output_tuple: tuple = data_org.extractBookData()

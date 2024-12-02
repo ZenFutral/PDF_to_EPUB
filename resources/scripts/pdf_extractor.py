@@ -2,6 +2,38 @@ from time import sleep
 
 class PDFExtractor: 
     paragraph_end_markers: list[str] = ['"', '.', '!', '?']
+
+    unicode_dict_single_pass: dict[str, str] = {
+        # PUA: Private Use Area
+        '\uf645':               "",                 
+        '\uf646':               "",                 
+        '\uf647':               "",                 
+        '\uf648':               "",                 
+        '\uf649':               "",                 
+        '\uf64a':               "",   
+        # =====================
+        # Formatting Choices              
+        f" {chr(8216)}":       f" {chr(8220)}",     # Left  Single Quotation Mark, preceeded by space
+        f"\n{chr(8216)}":      f"\n{chr(8220)}",    # Left  Single Quotation Mark, preceeded by break
+        chr(8216):              "'",                # Left  Single Quotation Mark
+        f".{chr(8217)}":       f".{chr(8221)}",     # Right Single Quotation Mark, preceeded by .
+        f",{chr(8217)}":       f",{chr(8221)}",     # Right Single Quotation Mark, preceeded by ,
+        f"!{chr(8217)}":       f"!{chr(8221)}",     # Right Single Quotation Mark, preceeded by !
+        f"?{chr(8217)}":       f"?{chr(8221)}",     # Right Single Quotation Mark, preceeded by ?
+        f"—{chr(8217)}":       f"—{chr(8221)}",     # Right Single Quotation Mark, preceeded by —
+
+        chr(8217):              "'",                # Right Single Quotation Mark
+
+        '— —' : '——',
+        '\n': ''
+    }
+
+    unicode_dict_multi_pass: dict[str, str] = {
+        "  ":       " ",    # Fixes double space
+        "- ":       "",     # Removes word breaks between pages
+        '———':      '——'
+    }
+
     number_dict: dict[str, int] = {
         'one': 1,
         'two': 2,
@@ -55,12 +87,24 @@ class PDFExtractor:
         'fifty': 50
     }
 
-    def __init__(self, pages, title: str, section_types: list[str], header_len: int = 0, footer_len: int = 0, LOGGING_show_raw_pages: bool = False) -> None:
+    def __init__(
+            self, 
+            pages,
+            title: str, 
+            section_types: list[str],
+            title_pages_len: int = 0, 
+            header_len: int = 0, 
+            footer_len: int = 0, 
+            LOGGING_show_raw_pages: bool = False
+
+        ) -> None:
+        
         self.pages = pages
         self.title = title
+        self.section_types = section_types
+        self.title_pages_len = title_pages_len - 1
         self.header_len = header_len
         self.footer_len = footer_len
-        self.section_types = section_types
         self.LOGGING_show_raw_pages = LOGGING_show_raw_pages
 
         self.sections_found: list[str] = []
@@ -216,9 +260,129 @@ class PDFExtractor:
     def extractData(self) -> list[str]:
         data_list: list[str] = []
 
-        for page in self.pages:
+        for pi in range(len(self.pages)): # Page Index
+            page = self.pages[pi]
+
+            if pi <= self.title_pages_len:
+                continue
+
             raw_page_data: str = page.get_text()
             paragraphs_on_page: list[str] = self._extractParagraphs(raw_page_data)
             data_list.extend(paragraphs_on_page)
         
         return data_list 
+
+# =========================================================================
+
+    def _repairSinglePass(self, text: str) -> str:
+        # Repairs any single pass issues
+        for key in PDFExtractor.unicode_dict_single_pass.keys():
+            if key in text:
+                text = text.replace(key, PDFExtractor.unicode_dict_single_pass[key])
+        
+        return text
+    
+    def _repairMultiPass(self, text: str) -> str:
+        # Repairs any multi pass issues
+        is_errors = True
+
+        while is_errors:
+            error_list = []
+
+            for key in PDFExtractor.unicode_dict_multi_pass.keys():
+                if key in text:
+                    text = text.replace(key, PDFExtractor.unicode_dict_multi_pass[key])
+                    error_list.append(True)
+                
+                else:
+                    error_list.append(False)
+        
+            if True not in error_list:   # If not errors logged in this cycle
+                is_errors = False
+
+        return text
+
+    def _repairText(self, text: str) -> str:
+        text = self._repairSinglePass(text)
+        text = self._repairMultiPass(text)
+
+        return text
+    
+    def _lastIdxIsInt(self, char: str) -> bool:
+        if char.isnumeric():
+            return True
+        
+        else:
+            return False
+        
+    def _repairBadBreaks(self, data: list[str]) -> tuple[list[str], bool]:
+        repaired_something: bool = False
+        skip_paragraph: bool = False
+        new_data_list: list[str] = []
+
+        for i in range(len(data)):
+            if i == (len(data) - 1):    # If last line
+                break
+
+            if skip_paragraph:
+                skip_paragraph = False
+                continue
+
+            current_paragraph: str = data[i]    # If empty paragraph
+            if len(current_paragraph) < 1:
+                continue
+
+                    
+            last_char: str = current_paragraph[-1]            
+
+            if self._lastIdxIsInt(last_char):
+                new_paragraph: str = '\n' + current_paragraph
+                new_data_list.append(new_paragraph)
+                continue
+
+
+            elif last_char not in PDFExtractor.paragraph_end_markers:
+                repaired_something = True
+                skip_paragraph = True
+                next_paragraph: str = data[i + 1]
+                new_paragraph = current_paragraph + next_paragraph
+                new_data_list.append(new_paragraph)
+                continue
+            
+            repaired_something = False
+            new_paragraph = current_paragraph
+            new_data_list.append(new_paragraph)
+
+        
+        return new_data_list, repaired_something
+
+    def _initiateBadBreakRepair(self, data: list[str]) -> list[str]:
+        repairing: bool = True
+
+        while repairing:
+            data, repairing = self._repairBadBreaks(data)
+
+        return data
+
+    def _removeEmptyLines(self, data: list[str]) -> list[str]:
+        new_data: list[str] = []
+
+        for text in data:
+            checker_text: str = text.replace('\n', '').replace(' ', '')
+
+            if len(checker_text) < 3:
+                continue
+
+            else:
+                new_data.append(text)
+            
+        return new_data
+
+    def cleanData(self, data: list[str]) -> list[str]:
+        data = [self._repairText(text) for text in data]
+        data = [text.strip() for text in data]
+        data = self._initiateBadBreakRepair(data)
+        data = self._removeEmptyLines(data)
+        
+
+        return data
