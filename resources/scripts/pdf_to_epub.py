@@ -8,6 +8,15 @@
 # ================================================================================================
 # ================================================================================================
 
+# TDL:
+#   - Why is chapter 6 disappearing between extraction and organization?
+#   - Why do body sections have the next chapter name at the end?
+#   - Add functionality to check for the cover image
+#   - Does file order matter for epub?
+#   - Figure out how to compress and export as epub.
+
+
+
 import pymupdf #type: ignore
 from time import sleep
 from pdf_extractor import PDFExtractor
