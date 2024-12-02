@@ -12,7 +12,7 @@ import pymupdf #type: ignore
 from time import sleep
 from pdf_extractor import PDFExtractor
 from data_organizer import DataOrganizer
-from epub_formatter import EPUBFormatter
+from epub_exporter import EPUBExport
 
 section_names: list[str] = ["Part", "Chapter"]  # Ordered from top organizational layer downwards (ie Parts > Chapters > Scenes)
 
@@ -58,10 +58,10 @@ def main() -> None:
     data_org: DataOrganizer = DataOrganizer(sections_found, data, section_names)
     data_dict: dict = data_org.data_dict
 
-    ebup_formatter: EPUBFormatter = EPUBFormatter(data_dict)
+    ebup_formatter: EPUBExport = EPUBExport(data_dict, section_names)
 
     saveToFile(file_name= r"1_pdf_extractor.txt", paragraphs= data)
-    saveToFile(file_name= r"2_data_org.txt", paragraphs= list(data_dict.items()))
+    saveToFile(file_name= r"2_data_org.txt", paragraphs= list(data_dict.keys()))
 
 if __name__ == "__main__":
     main()
