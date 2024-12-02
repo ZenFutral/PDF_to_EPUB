@@ -1,47 +1,89 @@
 class DataOrganizer:
-    def __init__(self, section_names: list[str], data: list[str]) -> None:
+    def __init__(self, sections_found: list[str], data: list[str], section_names: list[str]) -> None:
         self.data: list[str] = data
-        self.sections: list[str] = section_names
+        self.sections_found: list[str] = sections_found
 
-    def extractBookData(self) -> tuple[list[str], list[tuple[str, int]]]:
-        new_data: list[str] = []
-        sections_found: list[tuple[str, int]] = []
+        self.section_names: list[str] = section_names
 
-        for ti in range(len(self.data)):   # Text Index
-            text: str = self.data[ti]
+        self.data_dict: dict = dict({})
 
-            if len(text) < 3:
+        self.convertToDict()
+
+    def _getSectionIndexRanges(self, unique_sections: dict[str, str]) -> dict[str, range]:
+        section_indexs: dict[str, int] = dict({})
+
+        for new_section_name in list(unique_sections.keys()):
+            old_section_name: str = unique_sections[new_section_name]
+
+            for ti in range(len(self.data)):    # Text Index
+                text: str = self.data[ti]
+
+                if old_section_name in text:
+                    section_indexs[new_section_name] = ti + 1
+
+        si = 0     # Section Idx
+        section_ranges: dict[str, range] = dict({})
+        sect_idx_keys: list[str] = list(section_indexs.keys())
+
+        while si < len(sect_idx_keys) - 1:
+            nsi: int = si + 1       # Next Session Idx
+            
+            current_section_key: str = sect_idx_keys[si]
+            lower_bound: int = section_indexs[current_section_key]
+
+            next_section_key: str = sect_idx_keys[nsi]
+            upper_bound: int = section_indexs[next_section_key]
+
+            section_ranges[current_section_key] = range(lower_bound, upper_bound)
+
+            si += 1
+
+        last_section_key: str = sect_idx_keys[-1]
+        lower_bound = section_indexs[last_section_key]
+        section_ranges[last_section_key] = range(lower_bound, len(self.data))
+
+        return section_ranges
+
+    def _makeSectionsUnique(self) -> dict[str, str]:
+        new_dict: dict[str, str] = dict({})
+        top_sect: str = self.section_names[0]
+        current_prefix: str = ''
+
+        for section in self.sections_found:
+            if top_sect in section:
+                current_prefix = section
+                new_section_name: str = section
+
+            else:
+                new_section_name = f"{current_prefix} -:- {section}"
+            
+            new_dict[new_section_name] = section
+        
+        return new_dict
+
+    def _divideByLowestSection(self, section_ranges: dict[str, range]) -> dict[str, list[str]]:
+        data_dict: dict[str, list] = dict({})
+        section_filter: str = self.section_names[-1]
+        sr_keys: list = list(section_ranges.keys())
+
+        for si in range(len(section_ranges)):
+            section_key: str = sr_keys[si]
+
+            if section_filter not in section_key:
                 continue
 
-            for si in range(len(self.section_types)): # Section Index
-                type: str = self.section_types[si]
-                
-                if type not in text:
-                    new_data.append(text)
-                    continue
-                
-                sn_search_area: str = text[si:]
-                section_number: str = self._getSectionNumber(section_name= type, text= sn_search_area)
+            text_list: list[str] = []
+            text_range: range = section_ranges[section_key]
 
-                if section_number:
-                    current_section_name = f'{type}{section_number}'
-                    print(type, section_number, current_section_name)
+            for ti in text_range:
+                text: str = self.data[ti]
+                text_list.append(text)
+            
+            data_dict[section_key] = text_list
+            
+        return data_dict
 
-                    new_data.append(text[si:])
-
-                    new_data.append(current_section_name)
-                    sections_found.append((current_section_name, len(new_data)))
-
-                    following_text: str = text[len(current_section_name):]
-                    new_data.append(following_text)
-
-        sections_found = sorted(sections_found, key=lambda x: x[1])
-
-
-        return (new_data, sections_found)
-
-#    def organizeSections(self, data: list[str], sections: list[str]) -> dict:
-#        book_dict: dict = {}
-#        
-#        for section in sections:
-#            section_idx: int = data.index(section)
+    def convertToDict(self) -> None:
+        unique_sections: dict[str, str] = self._makeSectionsUnique()
+        section_ranges: dict[str, range] = self._getSectionIndexRanges(unique_sections)
+        self.data_dict = self._divideByLowestSection(section_ranges)

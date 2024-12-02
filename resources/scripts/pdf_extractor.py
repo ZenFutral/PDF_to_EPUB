@@ -99,6 +99,7 @@ class PDFExtractor:
 
         ) -> None:
         
+        # Class init arguments
         self.pages = pages
         self.title = title
         self.section_types = section_types
@@ -107,7 +108,13 @@ class PDFExtractor:
         self.footer_len = footer_len
         self.LOGGING_show_raw_pages = LOGGING_show_raw_pages
 
+        # Class init empty variables
         self.sections_found: list[str] = []
+        self.new_data: list[str] = []
+
+        # Run logic
+        self.extractData()
+        self.cleanData()
 
     def LOGGING_saveCharandUnicode(self, list_of_paragraphs: list[str]) -> None:
         with open("char_and_uni.txt", "w") as text_file:
@@ -257,9 +264,7 @@ class PDFExtractor:
 
         return list_of_paragraphs
 
-    def extractData(self) -> list[str]:
-        data_list: list[str] = []
-
+    def extractData(self) -> None:
         for pi in range(len(self.pages)): # Page Index
             page = self.pages[pi]
 
@@ -268,10 +273,8 @@ class PDFExtractor:
 
             raw_page_data: str = page.get_text()
             paragraphs_on_page: list[str] = self._extractParagraphs(raw_page_data)
-            data_list.extend(paragraphs_on_page)
+            self.new_data.extend(paragraphs_on_page)
         
-        return data_list 
-
 # =========================================================================
 
     def _repairSinglePass(self, text: str) -> str:
@@ -378,11 +381,12 @@ class PDFExtractor:
             
         return new_data
 
-    def cleanData(self, data: list[str]) -> list[str]:
+    def cleanData(self) -> None:
+        data = self.new_data
+
         data = [self._repairText(text) for text in data]
         data = [text.strip() for text in data]
         data = self._initiateBadBreakRepair(data)
         data = self._removeEmptyLines(data)
         
-
-        return data
+        self.new_data = data

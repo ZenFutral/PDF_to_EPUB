@@ -17,16 +17,28 @@ from epub_formatter import EPUBFormatter
 section_names: list[str] = ["Part", "Chapter"]  # Ordered from top organizational layer downwards (ie Parts > Chapters > Scenes)
 
 def saveToFile(file_name: str, paragraphs: list, include_unicode: bool = False) -> None:
-    folder_dir: str = r"resources\scripts\outputs\ ".strip()
+    folder_dir: str = r"resources\scripts\outputs\ ".strip()    # .strip() is only used because \" is an escape character
     file_dir: str = f"{folder_dir}{file_name}"
     with open(file_dir, "w", encoding='utf-16') as text_file:
         for par in paragraphs:
-            text_file.write(par + '\n')
+                if isinstance(par, list):
+                    par = ' '.join(par)
+                
+                elif isinstance(par, tuple):
+                    par_list = par[1]
+                    par_list_as_str = "".join(par_list)
+                    par = ' '.join([par[0], par_list_as_str])
+
+                text_file.write(par + '\n')
 
     if include_unicode:
         with open((file_dir + '_unicode'), "w", encoding='utf-16') as text_file:
             for par in paragraphs:
+                if isinstance(par, list):
+                    par = ' '.join(par)
+
                 text_file.write(repr(par + '\n'))
+
 
 def main() -> None:
     file_name: str = r"resources\test_pdfs\1984.pdf"
@@ -40,18 +52,16 @@ def main() -> None:
         header_len = 2
     )
     
-    pdf_data: list[str] = pdf_extractor.extractData()
     sections_found: list[str] = pdf_extractor.sections_found
-    clean_data: list[str] = pdf_extractor.cleanData(pdf_data)
+    data:           list[str] = pdf_extractor.new_data
 
-    #data_org: DataOrganizer = DataOrganizer(section_names= section_names, data= clean_data)
-    #output_tuple: tuple = data_org.extractBookData()
-    #data: list[str] = output_tuple[0]
-    #sections: list[tuple[str, int]] = output_tuple[1]
+    data_org: DataOrganizer = DataOrganizer(sections_found, data, section_names)
+    data_dict: dict = data_org.data_dict
 
-    saveToFile(file_name= r"1_pdf_extractor.txt", paragraphs= pdf_data)
-    saveToFile(file_name= r"2_data_cleaner.txt", paragraphs= clean_data)
-    #saveToFile(file_name= r"3_data_org.txt", paragraphs= data)
+    ebup_formatter: EPUBFormatter = EPUBFormatter(data_dict)
+
+    saveToFile(file_name= r"1_pdf_extractor.txt", paragraphs= data)
+    saveToFile(file_name= r"2_data_org.txt", paragraphs= list(data_dict.items()))
 
 if __name__ == "__main__":
     main()
