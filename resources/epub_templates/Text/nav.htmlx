@@ -10,6 +10,8 @@
   <nav epub:type="toc" id="toc" role="doc-toc">
     <h1>Table of Contents</h1>
     <ol>
+     		<a href="___SECTION_FILE_DIRECTORY___"><h2>___SECTION_TITLE___</h2></a>
+
       <li>
         <a href="___CHAPTER_FILE_DIRECTORY___">___CHAPTER_TITLE___</a>
       </li>

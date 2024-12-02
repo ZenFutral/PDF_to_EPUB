@@ -48,7 +48,6 @@ def main() -> None:
         pages= document, 
         section_types= section_names, 
         title_pages_len= 1, 
-        title = "1984", 
         header_len = 2
     )
     
@@ -58,7 +57,7 @@ def main() -> None:
     data_org: DataOrganizer = DataOrganizer(sections_found, data, section_names)
     data_dict: dict = data_org.data_dict
 
-    ebup_formatter: EPUBExport = EPUBExport(data_dict, section_names)
+    ebup_formatter: EPUBExport = EPUBExport(data_dict, section_names, "1984", "George Orwell")
 
     saveToFile(file_name= r"1_pdf_extractor.txt", paragraphs= data)
     saveToFile(file_name= r"2_data_org.txt", paragraphs= list(data_dict.keys()))

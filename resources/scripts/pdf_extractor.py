@@ -90,7 +90,6 @@ class PDFExtractor:
     def __init__(
             self, 
             pages,
-            title: str, 
             section_types: list[str],
             title_pages_len: int = 0, 
             header_len: int = 0, 
@@ -101,7 +100,6 @@ class PDFExtractor:
         
         # Class init arguments
         self.pages = pages
-        self.title = title
         self.section_types = section_types
         self.title_pages_len = title_pages_len - 1
         self.header_len = header_len
